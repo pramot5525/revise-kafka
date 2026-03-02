@@ -15,8 +15,8 @@ import (
 
 const (
 	broker = "localhost:19092"
-	topic  = "demo-topic"
-	group  = "demo-group"
+	topic  = "user-register.p10"
+	group  = "user-consumer-group"
 )
 
 type User struct {
@@ -58,6 +58,11 @@ func produce() {
 		{Name: "Carol", Email: "carol@example.com", IsActive: true},
 		{Name: "Dave", Email: "dave@example.com", IsActive: true},
 		{Name: "Eve", Email: "eve@example.com", IsActive: false},
+		{Name: "Frank", Email: "frank@example.com", IsActive: true},
+		{Name: "Grace", Email: "grace@example.com", IsActive: false},
+		{Name: "Hank", Email: "hank@example.com", IsActive: true},
+		{Name: "Ivy", Email: "ivy@example.com", IsActive: false},
+		{Name: "Jack", Email: "jack@example.com", IsActive: true},
 	}
 
 	for i, u := range users {
@@ -100,7 +105,8 @@ func consume() {
 	fmt.Println("consuming messages (ctrl+c to stop)…")
 
 	for {
-		m, err := r.ReadMessage(ctx)
+		// FetchMessage ดึง message มาแต่ยังไม่ commit
+		m, err := r.FetchMessage(ctx)
 		if err != nil {
 			if ctx.Err() != nil {
 				fmt.Println("\nstopped consuming")
@@ -118,5 +124,16 @@ func consume() {
 
 		fmt.Printf("consumed: partition=%d offset=%d key=%s | name=%s email=%s isActive=%v\n",
 			m.Partition, m.Offset, m.Key, u.Name, u.Email, u.IsActive)
+
+		// delay 3 วินาทีก่อน commit (จำลอง processing time)
+		fmt.Printf("processing... (3s delay before commit)\n")
+		time.Sleep(3 * time.Second)
+
+		// commit บอก broker ว่าอ่านแล้ว
+		if err := r.CommitMessages(ctx, m); err != nil {
+			log.Printf("failed to commit message: %v", err)
+		} else {
+			fmt.Printf("committed: partition=%d offset=%d\n", m.Partition, m.Offset)
+		}
 	}
 }
