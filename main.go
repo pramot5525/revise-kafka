@@ -2,6 +2,7 @@ package main
 
 import (
 	"context"
+	"encoding/json"
 	"fmt"
 	"log"
 	"os"
@@ -17,6 +18,12 @@ const (
 	topic  = "demo-topic"
 	group  = "demo-group"
 )
+
+type User struct {
+	Name     string `json:"name"`
+	Email    string `json:"email"`
+	IsActive bool   `json:"isActive"`
+}
 
 func main() {
 	if len(os.Args) < 2 {
@@ -35,7 +42,7 @@ func main() {
 	}
 }
 
-// produce sends 5 messages to the topic then exits.
+// produce sends sample User messages to the topic then exits.
 func produce() {
 	w := &kafka.Writer{
 		Addr:                   kafka.TCP(broker),
@@ -45,18 +52,30 @@ func produce() {
 	}
 	defer w.Close()
 
-	for i := 1; i <= 5; i++ {
-		msg := kafka.Message{
-			Key:   []byte(fmt.Sprintf("key-%d", i)),
-			Value: []byte(fmt.Sprintf("hello from redpanda – message %d", i)),
+	users := []User{
+		{Name: "Alice", Email: "alice@example.com", IsActive: true},
+		{Name: "Bob", Email: "bob@example.com", IsActive: false},
+		{Name: "Carol", Email: "carol@example.com", IsActive: true},
+		{Name: "Dave", Email: "dave@example.com", IsActive: true},
+		{Name: "Eve", Email: "eve@example.com", IsActive: false},
+	}
+
+	for i, u := range users {
+		body, err := json.Marshal(u)
+		if err != nil {
+			log.Fatalf("failed to marshal user: %v", err)
 		}
 
-		err := w.WriteMessages(context.Background(), msg)
-		if err != nil {
+		msg := kafka.Message{
+			Key:   []byte(fmt.Sprintf("key-%d", i+1)),
+			Value: body,
+		}
+
+		if err := w.WriteMessages(context.Background(), msg); err != nil {
 			log.Fatalf("failed to write message: %v", err)
 		}
 
-		fmt.Printf("produced: %s\n", msg.Value)
+		fmt.Printf("produced: %s\n", body)
 		time.Sleep(500 * time.Millisecond)
 	}
 
@@ -91,7 +110,13 @@ func consume() {
 			continue
 		}
 
-		fmt.Printf("consumed: partition=%d offset=%d key=%s value=%s\n",
-			m.Partition, m.Offset, m.Key, m.Value)
+		var u User
+		if err := json.Unmarshal(m.Value, &u); err != nil {
+			log.Printf("failed to unmarshal message: %v", err)
+			continue
+		}
+
+		fmt.Printf("consumed: partition=%d offset=%d key=%s | name=%s email=%s isActive=%v\n",
+			m.Partition, m.Offset, m.Key, u.Name, u.Email, u.IsActive)
 	}
 }
